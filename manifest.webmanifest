@@ -1,0 +1,19 @@
+{
+ "name": "Birddog \u2014 Amateur Scouting",
+ "short_name": "Birddog",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "orientation": "portrait",
+ "background_color": "#101820",
+ "theme_color": "#101820",
+ "description": "Cover an amateur class every spring. Six years later the organisation finds out what you were right about.",
+ "icons": [
+  {
+   "src": "icon.svg",
+   "sizes": "any",
+   "type": "image/svg+xml",
+   "purpose": "any maskable"
+  }
+ ]
+}
