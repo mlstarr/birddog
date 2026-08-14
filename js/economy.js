@@ -35,7 +35,7 @@ function applyEconomy(p, forced) {
   let lev = 1;
   if (p.origin === "HS" && p.buzz > 46) lev *= 1.32;
   if (p.origin === "JUCO") lev *= 0.90;
-  if (p.level === "College Sr.") lev *= 0.32;
+  if (p.level === "College senior") lev *= 0.32;
   if (p.arch === "tj" || p.arch === "bounce") lev *= 0.76;
   // Leverage is a function of where you're picked. Nobody turns down top-five money
   // to go back to school, so the top of the board signs at slot. Leverage is real

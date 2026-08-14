@@ -292,9 +292,21 @@ function genProspect(year, opts = {}) {
   const mod = arch.mod;
 
   let age, school, home, level;
-  if (origin === "HS") { age = ri(17, 19) - (rnd() < 0.5 ? 0.5 : 0); school = pick(HS_PREFIX) + " HS"; home = pick(STATES); level = "High School"; }
-  else if (origin === "COL") { age = 20 + (rnd() < 0.4 ? 1 : 0) + (rnd() < 0.5 ? 0.5 : 0); school = pick(COLLEGES); home = pick(STATES); level = rnd() < 0.7 ? "College Jr." : "College Sr."; }
-  else if (origin === "JUCO") { age = 19 + (rnd() < 0.5 ? 0.5 : 0); school = pick(JUCOS); home = pick(STATES); level = "JUCO"; }
+  // A player's school is in the state he's from — nobody is a Texas high
+  // schooler at a school in New Jersey.
+  if (origin === "HS") {
+    age = ri(17, 19) - (rnd() < 0.5 ? 0.5 : 0);
+    home = pick(STATE_LIST); school = makeHighSchool(home); level = "High school";
+  } else if (origin === "COL") {
+    age = 20 + (rnd() < 0.4 ? 1 : 0) + (rnd() < 0.5 ? 0.5 : 0);
+    home = pick(STATE_LIST); school = makeCollege(home);
+    // draft-eligible college players are overwhelmingly juniors
+    const r = rnd();
+    level = r < 0.68 ? "College junior" : r < 0.90 ? "College senior" : "College sophomore";
+  } else if (origin === "JUCO") {
+    age = 19 + (rnd() < 0.5 ? 0.5 : 0);
+    home = pick(STATE_LIST); school = makeJuco(home); level = "Junior college";
+  }
   else { age = 16 + (rnd() < 0.4 ? 0.5 : 0); const c = pick(COUNTRIES); school = c === "Dominican Republic" ? pick(DR_TOWNS) + ", D.R." : c; home = c; level = "International FA"; }
 
   const asian = origin === "INTL" && rnd() < 0.1;
@@ -372,7 +384,7 @@ function genProspect(year, opts = {}) {
   let ask = askBase;
   if (origin === "HS" && buzz > 48) ask *= 1.35;   // college commitment
   if (origin === "INTL") ask *= 0.72;
-  if (level === "College Sr.") ask *= 0.35;         // no leverage at all
+  if (level === "College senior") ask *= 0.35;         // no leverage at all
   if (arch.k === "tj" || arch.k === "bounce") ask *= 0.7;
   ask = Math.round(clamp(ask, 0.05, 26) * 100) / 100;
 
@@ -654,7 +666,7 @@ function runLook(game, p, kind) {
     const hi = p.ask * (1 + spread) * (0.9 + rnd() * 0.2);
     p.askKnown = { lo, hi };
     if (p.origin === "HS" && p.ask > 2) L("Leverage", `Committed and the family knows it. Advisor is anchoring high.`);
-    else if (p.level === "College Sr.") L("Leverage", "Senior sign. No leverage whatsoever — he'll take what's offered.");
+    else if (p.level === "College senior") L("Leverage", "Senior sign. No leverage whatsoever — he'll take what's offered.");
     else if (p.origin === "INTL") L("Leverage", "Trainer controls the conversation. Deal gets done early or not at all.");
     L("Price", `He signs somewhere around ${moneyK(lo)}–${moneyK(hi)}.`);
   }

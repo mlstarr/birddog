@@ -33,14 +33,16 @@ function newGame() {
 }
 
 function looksMaxOf(s) { return 18 + 4 * s.upgrades.scouts; }
-function classSizeOf(s) { return 24 + 5 * s.upgrades.video; }
+// Thirty picks pass between each of your selections, so a 29-name follow list
+// is emptied before your third round. Real departments follow hundreds.
+function classSizeOf(s) { return 74 + 11 * s.upgrades.video; }
 
 function openClass(s) {
   const need = classSizeOf(s);
   // Cover far more of the country than you can follow, then let the department
   // decide who is worth a follow — weighted toward where you actually pick.
   const pool = [];
-  for (let i = 0; i < 150; i++) pool.push(genProspect(s.year));
+  for (let i = 0; i < 190; i++) pool.push(genProspect(s.year));
   for (let i = 0; i < 4; i++) { const p = genProspect(s.year); p.buzz = clamp(Math.round(p.buzz - ri(16, 30)), 20, 80); pool.push(p); }
   for (let i = 0; i < 3; i++) { const p = genProspect(s.year); p.buzz = clamp(Math.round(p.buzz + ri(10, 22)), 20, 82); pool.push(p); }
   assignConsensus(pool);                       // one ordered board, no ties
@@ -609,7 +611,7 @@ function cardFor(p) {
     <div class="rowtop">
       <div class="proj"><b>${p.consensus <= 330 ? "#" + p.consensus : "—"}</b><span>proj</span></div>
       <div class="flex mn"><div class="nm">${p.name}</div>
-        <div class="dim sm mn">${p.pos} · ${handed(p)} · ${p.age} · ${p.school}</div></div>
+        <div class="dim sm mn">${p.pos} · ${handed(p)} · ${p.age} · ${p.level}</div></div>
       <div class="ofp">${fvReady(p) ? `<b class="fv ${arrowOf(p)[3]}">${fvOf(p)}</b><span>your FV</span>` : `<b class="arrow ${arrowOf(p)[3]}">${arrowOf(p)[1]}</b><span>your read</span>`}</div>
     </div>
     <div class="rowbot">
@@ -833,7 +835,7 @@ function draftRow(p, pk) {
     <div class="rowtop">
       <div class="proj"><b>#${p.consensus}</b><span>proj</span></div>
       <div class="flex mn"><div class="nm">${p.name}</div>
-        <div class="dim sm mn">${p.pos} · ${p.level} · ${p.looks ? p.looks + " looks" : "area only"}</div></div>
+        <div class="dim sm mn">${p.pos} · ${p.level} · ${schoolLine(p)} · ${p.looks ? p.looks + " looks" : "area only"}</div></div>
       <div class="ofp">${fvReady(p) ? `<b class="fv ${arrowOf(p)[3]}">${fvOf(p)}</b><span>your FV</span>` : `<b class="arrow ${arrowOf(p)[3]}">${arrowOf(p)[1]}</b><span>your read</span>`}</div>
     </div>
     <div class="rowbot">
@@ -1658,10 +1660,17 @@ document.addEventListener("click", (ev) => {
   else if (a === "confirm") {
     const pk = currentPick(), p = S.prospects.find((x) => x.id === id), pr = priceRead(p);
     const bonus = UI.bonus == null ? Math.min(poolLeft(), Math.max(pk.slot, Math.round(pr.hi * 100) / 100)) : UI.bonus;
-    pk.pid = p.id; pk.bonus = bonus; S.draft.taken[p.id] = "you";
-    S.draft.idx += 1; UI.pickSel = null; UI.bonus = null; rollEvent(); save(); render();
+    pk.pid = p.id; pk.bonus = bonus;
+    S.draft.taken[p.id] = "you";
+    S.draft.gone[p.id] = "you";                 // he is off the board for everyone
+    S.draft.log.push({ n: pk.overall, name: p.name, pos: p.pos, club: "you" });
+    S.draft.idx += 1;
+    advanceBoard();                              // the other clubs pick after you
+    UI.pickSel = null; UI.bonus = null; rollEvent(); save(); render();
   }
-  else if (a === "pass") { currentPick().passed = true; S.draft.idx += 1; rollEvent(); save(); render(); }
+  else if (a === "pass") {
+    currentPick().passed = true; S.draft.idx += 1; advanceBoard(); rollEvent(); save(); render();
+  }
   else if (a === "tointl") { UI.screen = "intl"; render(); }
   else if (a === "ioff") {
     const p = S.intlProspects.find((x) => x.id === id);
