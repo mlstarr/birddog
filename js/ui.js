@@ -517,6 +517,8 @@ function viewOffice() {
     <button class="btn ghost" data-a="tab" data-k="database">The database — everyone you've signed</button>
     <div class="sp"></div>
     <button class="btn ghost" data-a="tab" data-k="title">Switch career</button>
+    <div class="sp"></div>
+    <button class="btn ghost" data-a="forceupdate">Check for a new version</button>
     ${UI.armed === "roll" ? `<div class="card warn mt8">Go back to the start of an earlier season?
       Anything after it is lost.<div class="grid3 mt8">
       ${[0, 1, 2].map((i) => `<button class="stance" data-a="rollback" data-k="${i}">${i === 0 ? "Last season" : (i + 1) + " back"}</button>`).join("")}</div>
@@ -1683,6 +1685,18 @@ document.addEventListener("click", (ev) => {
   else if (a === "resolve") { resolve(); }
   else if (a === "exp") { UI.expand[id] = !UI.expand[id]; UI.keepScroll = window.scrollY; render(); }
   else if (a === "next") { nextYear(); }
+  else if (a === "forceupdate") {
+    // clear every cache and re-register, then reload from the network
+    toast("Fetching the latest version\u2026");
+    const done = () => setTimeout(() => location.reload(true), 400);
+    try {
+      const jobs = [];
+      if (window.caches) jobs.push(caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k)))));
+      if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations()
+        .then((rs) => Promise.all(rs.map((r) => r.unregister()))));
+      Promise.all(jobs).then(done, done);
+    } catch (e) { done(); }
+  }
   else if (a === "dlsave") { exportSave(S, `${S.year}`); toast("Save file downloaded."); }
   else if (a === "restart") { UI.armed = null; wipe(); S = null; UI.screen = "title"; render(); }
 });

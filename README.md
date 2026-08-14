@@ -14,8 +14,10 @@ Forty seasons later the organisation finds out what you were right about.
 
 ## Updating it later
 
-Replace the changed files and **bump the `CACHE` name in `sw.js`**, or the
-service worker keeps serving the old version. Close and reopen the app once.
+The service worker is network-first, so a new upload arrives on the next load
+by itself — you no longer have to bump anything. If it ever seems stuck, the
+front office has a **Check for a new version** button that clears the cache and
+refetches from scratch.
 
 ## Saves
 
@@ -25,8 +27,8 @@ clearing its storage is the only thing that can lose a career.
 
 ## Files
 
-    index.html              shell and the boot error reporter
-    sw.js                   offline cache (bump CACHE when updating)
+    index.html              shell, boot error reporter, update handling
+    sw.js                   offline cache, network-first
     css/style.css           all styling
     js/schools.js           region-aware school names
     js/core.js              prospect generation, scouting, report language

@@ -60,7 +60,29 @@
 /* Offline. Registered last so a failure here can never stop the game. */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
-    navigator.serviceWorker.register("sw.js").catch(function () {});
+    navigator.serviceWorker.register("sw.js").then(function (reg) {
+      // check for a new build whenever the app is opened or refocused
+      reg.update();
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") reg.update();
+      });
+      reg.addEventListener("updatefound", function () {
+        var sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener("statechange", function () {
+          if (sw.state === "installed" && navigator.serviceWorker.controller) {
+            // a newer version is ready; take it on the next load
+            sw.postMessage("skipWaiting");
+          }
+        });
+      });
+    }).catch(function () {});
+    var reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
   });
 }
 </script>
