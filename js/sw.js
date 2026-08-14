@@ -1,6 +1,6 @@
 /* Birddog offline cache.
    Bump CACHE when you upload a new version — the old one is dropped on activate. */
-const CACHE = "birddog-v46";
+const CACHE = "birddog-v47";
 const ASSETS = [
   "./",
   "index.html",
