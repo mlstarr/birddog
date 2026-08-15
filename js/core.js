@@ -208,6 +208,10 @@ const TAG = { hit: "Hit", power: "Power", run: "Run", field: "Field", arm: "Arm"
   fb: "Fastball", brk: "Breaking", ch: "Change", cmd: "Command", delivery: "Delivery", dur: "Durability",
   frame: "Frame", makeup: "Makeup", health: "Medical" };
 
+// The market's prejudices now live in market.js and are rolled per career.
+// MARKET is set from the save on load, or freshly rolled for a new one.
+let MARKET = null;
+
 /* ---------- box-score lines that actually reconcile ----------
    Innings are thirds, strikeouts are outs, and a hitter cannot go 4-for-3.
    Everything below is built from a single count of outs or at-bats so the
@@ -369,8 +373,14 @@ function genProspect(year, opts = {}) {
     ? 0.32 * fut.fb + 0.24 * fut.brk + 0.14 * fut.ch + 0.30 * fut.cmd
     : 0.40 * fut.hit + 0.26 * fut.power + 0.09 * fut.run + 0.16 * fut.field + 0.09 * fut.arm;
 
-  // public buzz — imperfect view of true value. This is the market's opinion.
-  let buzz = tv + gauss(0, 11) + (mod.buzz || 0) * 0.4 + (origin === "COL" ? 3 : 0) + (isP && cur.fb >= 60 ? 5 : 0) + (!isP && cur.power >= 60 ? 4 : 0);
+  // ---- what the industry thinks of him ----
+  // The board is not merely noisy; it is BIASED, and always in the same
+  // directions. It pays for velocity, raw power and projectable bodies, and it
+  // discounts performance, small schools and players whose value is quiet. That
+  // tilt is the whole game: noise you can only average out, bias you can exploit.
+  const bias = marketBiasFor({ isP, cur, origin, level, proj, pos, health, makeup, arch: arch.k, ht, wt }, MARKET)
+    + marketCentre(MARKET);
+  let buzz = tv + bias + gauss(0, 7.5) + (mod.buzz || 0) * 0.4;
   buzz = clamp(buzz, 20, 82);
 
   // ask price driven almost entirely by buzz, not truth
@@ -559,17 +569,20 @@ function runLook(game, p, kind) {
 
   if (kind === "area") {
     // shallow coverage of the whole class: real signal, badly noisy
-    const av = 85 / (1 + 0.16 * game.upgrades.scouts);
+    const av = 150 / (1 + 0.18 * game.upgrades.scouts);
     if (p.isP) {
-      const fb = doObs("fb", av, 215), brk = doObs("brk", av + 14, 225), cmd = doObs("cmd", av + 10, 225);
-      L(TAG.fb, scoutLine("fb", fb, p.isP, true, p));
-      if (rnd() < 0.5) L(TAG.brk, scoutLine("brk", brk, p.isP, false, p)); else L(TAG.cmd, scoutLine("cmd", cmd, p.isP, false, p));
-      numbers.push(READ.velo(fb));
+      // One tool, seen once, from a man covering a whole territory.
+      const fb = doObs("fb", av, 300), brk = doObs("brk", av + 30, 320), cmd = doObs("cmd", av + 30, 320);
+      const which = rnd();
+      if (which < 0.55) { L(TAG.fb, scoutLine("fb", fb, p.isP, false, p)); numbers.push(READ.velo(fb)); }
+      else if (which < 0.8) L(TAG.brk, scoutLine("brk", brk, p.isP, false, p));
+      else L(TAG.cmd, scoutLine("cmd", cmd, p.isP, false, p));
     } else {
-      const hit = doObs("hit", av + 12, 225), pw = doObs("power", av, 215), run = doObs("run", av - 22, 200);
-      L(TAG.hit, scoutLine("hit", hit, p.isP, true, p));
-      if (rnd() < 0.5) L(TAG.power, scoutLine("power", pw, p.isP, false, p)); else L(TAG.run, scoutLine("run", run, p.isP, false, p));
-      numbers.push(READ.sixty(run));
+      const hit = doObs("hit", av + 25, 320), pw = doObs("power", av, 300), run = doObs("run", av - 40, 260);
+      const which = rnd();
+      if (which < 0.45) L(TAG.hit, scoutLine("hit", hit, p.isP, false, p));
+      else if (which < 0.78) L(TAG.power, scoutLine("power", pw, p.isP, false, p));
+      else { L(TAG.run, scoutLine("run", run, p.isP, false, p)); numbers.push(READ.sixty(run)); }
     }
     L(null, pick(shaky ? [
       "Caveat: three innings in awful conditions before I had to drive to the other side of the state. I would not weight this heavily.",

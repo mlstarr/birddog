@@ -1,4 +1,4 @@
-# Birddog — build 48
+# Birddog — build 52
 
 An amateur scouting simulation. You cover a draft class every spring with a
 limited number of trips and a bonus pool that is the sum of the picks you own.
@@ -6,12 +6,13 @@ Forty seasons later the organisation finds out what you were right about.
 
 ## Am I running the current version?
 
-The bottom of the title screen and the front office reads:
+The bottom of the title screen reads:
 
-    build 48 · slots, live draft, schools
+    build 52 · living market, live draft, slots
     3 save slots · 29 rival clubs
 
-If it says anything else, you are on an older copy.
+Anything else means an older copy is cached. Clear the browser's site data once
+(F12 → Application → Clear site data) and reload.
 
 ## Putting it online (GitHub Pages)
 
@@ -24,22 +25,21 @@ If it says anything else, you are on an older copy.
 ## Updating it later
 
 The service worker is network-first, so a new upload arrives on the next load
-by itself. If it ever seems stuck, the front office has a **Check for a new
-version** button that clears every cache and refetches from scratch.
-
-Adding `#reset` to the URL wipes all saves and starts clean.
+by itself. If it seems stuck, the front office has a **Check for a new version**
+button. Adding `#reset` to the URL wipes all saves and starts clean.
 
 ## Saves
 
-Three career slots, an autosave every season, three seasons of rollback, and
-per-slot export/import. Use **Download a save file** occasionally — a browser
-clearing its storage is the only thing that can lose a career.
+The app always opens on the career picker. Three slots, an autosave every
+season, three seasons of rollback, and per-slot export/import. Use
+**Download a save file** occasionally.
 
 ## Files
 
     index.html              shell, boot error reporter, update handling
     sw.js                   offline cache, network-first
     css/style.css           all styling
+    js/market.js            this career's market biases, and how they drift
     js/schools.js           region-aware school names
     js/core.js              prospect generation, scouting, report language
     js/text.js              composed scouting prose

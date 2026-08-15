@@ -6,7 +6,7 @@
 const SAVE_KEY = "birddog.save.v7";
 // Bump this with every release. It is the only way to tell, from inside the
 // running app, which version you are actually looking at.
-const BUILD = "build 48 \u00b7 slots, live draft, schools";
+const BUILD = "build 52 \u00b7 living market, live draft, slots";
 const SEASONS = 40;
 let S = null;
 let UI = { sort: "ofp", filter: "all", sel: null, pickSel: null, expand: {}, toast: null, screen: "title", armed: null };
@@ -19,11 +19,12 @@ function newGame() {
     draft: null, history: [], lastResults: null, phase: "scouting",
     farm: [], shadow: [], closed: [], seasonReport: null, pending: [], ach: {}, playoffs: 0, titles: 0,
     pendingHOF: [], hofList: [], rivals: [],
-    clubs: seedClubs(), pool: [],
+    clubs: seedClubs(), pool: [], market: rollMarket(),
     staff: [makeScout(0), makeScout(0), makeScout(0), makeScout(0), makeScout(0)],
     careerWAR: 0, allStars: 0, superstars: 0, signedTotal: 0, mlbTotal: 0,
     winsSum: 0, bigSeasons: 0, best: null,
   };
+  MARKET = S2.market;
   S2.rivals = seedRivals(S2.year);
   seedFarm(S2);
   // the club he left you isn't empty, so it isn't a 63-win team either
@@ -332,8 +333,22 @@ let render = function () {
 
   if (UI.toast) html += `<div class="toast">${UI.toast}</div>`;
   app.innerHTML = html;
-  app.scrollTop = 0;
-  if (UI.keepScroll) { window.scrollTo(0, UI.keepScroll); UI.keepScroll = 0; }
+  // The page scrolls on the window, not on #app — setting app.scrollTop did
+  // nothing, so every render left you wherever you happened to be, usually the
+  // bottom of the list you just tapped in.
+  if (UI.keepScroll) {
+    // an in-place action: stay put
+    const y = UI.keepScroll; UI.keepScroll = 0;
+    try { window.scrollTo(0, y); } catch (e) {}
+  } else {
+    // a new screen: start at the top
+    try { window.scrollTo(0, 0); } catch (e) {}
+    if (app.scrollTop) app.scrollTop = 0;
+    if (typeof document !== "undefined") {
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    }
+  }
 }
 
 // Whatever goes wrong, there is always a way out of it.
@@ -407,12 +422,13 @@ function viewTitle() {
     you did not choose, and a bonus pool that is the sum of the picks you own. Forty seasons later the
     organisation finds out what you were right about.</p>
 
-    <div class="eyebrow mt">Careers</div>
+    <div class="eyebrow mt">Choose a career</div>
     ${slots.map(({ n, m }) => m ? `<div class="card slot">
         <button class="full" data-a="useslot" data-k="${n}">
           <div class="rowtop"><div class="flex mn">
-            <div class="nm">Slot ${n} &middot; ${m.year}</div>
-            <div class="dim sm">${m.seasons} season${m.seasons === 1 ? "" : "s"} &middot; ${money(m.surplus)} lifetime &middot; ${m.signed} signed${m.titles ? ` &middot; ${m.titles} title${m.titles === 1 ? "" : "s"}` : ""}</div>
+            <div class="nm">${m.year} &middot; season ${m.seasons + 1} of 40</div>
+            <div class="amb sm">${m.where || "in progress"}${m.pick ? ` &middot; holds pick #${m.pick}` : ""}</div>
+            <div class="dim sm">${money(m.surplus)} lifetime &middot; ${m.signed} signed${m.farm ? ` &middot; ${m.farm} in the system` : ""}${m.titles ? ` &middot; ${m.titles} title${m.titles === 1 ? "" : "s"}` : ""}${m.hof ? ` &middot; ${m.hof} HOF` : ""}</div>
             ${m.best ? `<div class="dim xs">best signing: ${m.best}</div>` : ""}
           </div><div class="ofp"><b class="amb">&rsaquo;</b><span>resume</span></div></div>
         </button>
@@ -491,6 +507,22 @@ function viewOffice() {
       ${S.draftNote ? `<br><span class="amb">${S.draftNote}</span>` : ""}</div>
     </div>
     ${rows}
+    ${S.upgrades.analytics >= 1 ? (() => {
+      const rows = marketReport(S.market, S.upgrades.analytics);
+      return `<div class="eyebrow mt">Market research</div>
+      <div class="card">
+        <div class="dim sm mb">What the department has worked out about the industry you are competing
+        against. Every market has its own habits, and they shift over the years.
+        ${S.upgrades.analytics < 3 ? `A deeper department would see more of them, and put numbers on it.` : ``}</div>
+        ${rows.map((r) => `<div class="hrow">
+          ${r.exact ? `<b class="${r.v > 0 ? "bad" : "good"}">${r.v > 0 ? "+" : ""}${r.v}</b>`
+            : `<b class="${r.v > 0 ? "bad" : "good"}">${r.v > 0 ? "over" : "under"}</b>`}
+          <span class="dim sm flex"><b>${r.name}</b> — ${r.note}</span></div>`).join("")}
+        <div class="dim xs mt8">${S.upgrades.analytics >= 3
+          ? "Positive means the market pays too much. Negative means it is a bargain."
+          : "\u201cOver\u201d means the market pays too much for it; \u201cunder\u201d means it is going cheap."}</div>
+      </div>`;
+    })() : ""}
     <div class="eyebrow mt">Achievements <span class="dim">${Object.keys(S.ach || {}).length} of ${ACHIEVEMENTS.length}</span></div>
     <div class="card">${ACHIEVEMENTS.map((a) => {
       const y = S.ach && S.ach[a.k];
@@ -546,8 +578,9 @@ const UPGRADES2 = [
     desc: ["Hire a national cross-checker. Unlocks cross-check looks.", "Second cross-checker.", "Elite evaluation staff."],
     effect: "Unlocks cross-checks; less error in every report" },
   { k: "analytics", name: "Analytics department", max: 3, cost: [65, 155, 300],
-    desc: ["Build the department. Unlocks data pulls.", "Proprietary models.", "Best-in-class R&D."],
-    effect: "Unlocks data pulls; very little observer error" },
+    desc: ["Build the department. Unlocks data pulls.", "Proprietary models — very precise measurables.",
+      "Market research: a standing report on where the industry misprices players."],
+    effect: "Unlocks data pulls, precise measurables, and a read on market inefficiency" },
   { k: "medical", name: "Medical & performance", max: 3, cost: [50, 120, 235],
     desc: ["Team physician on staff. Unlocks medical reviews.", "Full performance staff.", "Elite sports-science group."],
     effect: "Unlocks medicals; your signings get hurt less" },
@@ -715,6 +748,8 @@ function reportCard(r) {
 function startDraft() {
   S.draft = { picks: buildPicks(S), idx: 0, taken: {}, gone: {}, clubOffset: ri(0, 28), log: [] };
   if (!S.clubs || !S.clubs.length) S.clubs = seedClubs();
+    if (!S.market) S.market = rollMarket();
+    MARKET = S.market;
   buildClubBoards(S.clubs, S.pool);
   // everything ahead of your first pick happens before you are on the clock
   S.draft.lastGone = runRivalPicks(S, 1, S.draft.picks[0].overall);
@@ -1022,6 +1057,7 @@ function advanceSeason(bonusesPaid) {
   }
   for (const rec of S.shadow) stepSeason(rec, S.upgrades, S.year);
   ageRivals(S);
+  driftMarket(S.market);
   dedupeNames(S);
 
   // close the books on anyone whose time is up
@@ -1147,12 +1183,12 @@ function nextYear() {
 }
 
 const CAREER_TIERS = [
-  [6400, "Hall of Fame", "They name the complex after you. Thirty years of finding people nobody else saw."],
-  [5600, "Legendary", "One of the great scouting directors of the era. Other clubs copied your process."],
-  [4600, "Elite", "A long run at the top of the profession. You built a pipeline that never dried up."],
-  [3700, "Very good", "Consistently ahead of the board. A few misses, but the hit rate held up for three decades."],
-  [2700, "Solid", "A respectable career. You beat the consensus more often than not."],
-  [1800, "Adequate", "Roughly what a competent department produces. Some good years, some forgettable ones."],
+  [7400, "Hall of Fame", "They name the complex after you. Thirty years of finding people nobody else saw."],
+  [6400, "Legendary", "One of the great scouting directors of the era. Other clubs copied your process."],
+  [5300, "Elite", "A long run at the top of the profession. You built a pipeline that never dried up."],
+  [4300, "Very good", "Consistently ahead of the board. A few misses, but the hit rate held up for three decades."],
+  [3200, "Solid", "A respectable career. You beat the consensus more often than not."],
+  [2200, "Adequate", "Roughly what a competent department produces. Some good years, some forgettable ones."],
   [900, "Underwhelming", "You drafted close to the board and got close-to-board results."],
   [500, "Poor", "The money mostly went out and didn't come back. It's a hard job."],
   [-1e9, "A cautionary tale", "Forty years, very little to show for it. Somewhere there's a file with your name on it."],
@@ -1541,12 +1577,17 @@ document.addEventListener("click", (ev) => {
   if (a === "useslot") {
     META.activeSlot = +k; saveMeta();
     loadSlot(+k).then((d) => {
-      if (!d) return;
+      if (!d) return toast("That slot is empty.");
       S = d; HAS_SAVE = true;
       if (!S.clubs || !S.clubs.length) S.clubs = seedClubs();
       if (!S.pool) S.pool = [];
+      if (!S.market) S.market = rollMarket();
+      MARKET = S.market;
       if (!S.rivals || !S.rivals.length) S.rivals = seedRivals(S.year);
-      UI.screen = S.phase === "career-over" ? "career" : S.phase === "offseason" ? "season" : (S.draft ? "draft" : "class");
+      if (!S.hofList) { S.hofList = []; S.pendingHOF = []; }
+      UI.screen = S.phase === "career-over" ? "career"
+        : S.phase === "offseason" ? "season"
+        : (S.draft && S.draft.idx < S.draft.picks.length) ? "draft" : "class";
       render();
     });
   }
@@ -1617,7 +1658,7 @@ document.addEventListener("click", (ev) => {
     const p = (S.prospects.concat(S.intlProspects)).find((x) => x.id === id);
     const d = LOOK_DEFS[k];
     if (S.looksLeft < d.cost) return toast("No looks left this spring.");
-    UI.keepScroll = window.scrollY;
+    // a new report is the point of the trip — put it in front of him
     runLook(S, p, k); S.looksLeft -= d.cost; save(); render();
   }
   else if (a === "buy") {
@@ -1711,6 +1752,8 @@ document.addEventListener("change", (ev) => {
       META.activeSlot = n; saveMeta();
       S = d; HAS_SAVE = true;
       if (!S.clubs || !S.clubs.length) S.clubs = seedClubs();
+    if (!S.market) S.market = rollMarket();
+    MARKET = S.market;
       if (!S.rivals || !S.rivals.length) S.rivals = seedRivals(S.year);
       if (!S.pool) S.pool = [];
       writeSlot(n, S);
@@ -1739,15 +1782,11 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     }
   } catch (e) {}
   await loadMeta();
-  const found = await loadSlot(META.activeSlot);
   if (S) return;
-  if (found) {
-    BOOT_SAVE = found; HAS_SAVE = true; S = found;
-    if (!S.clubs || !S.clubs.length) S.clubs = seedClubs();
-    if (!S.pool) S.pool = [];
-    if (!S.rivals || !S.rivals.length) S.rivals = seedRivals(S.year);
-    if (!S.hofList) { S.hofList = []; S.pendingHOF = []; }
-    UI.screen = S.phase === "career-over" ? "career" : S.phase === "offseason" ? "season" : (S.draft ? "draft" : "class");
-  } else UI.screen = "title";
+  // Always open on the career picker. Auto-resuming into whatever screen you
+  // happened to close on was disorienting — it looked like a stale page rather
+  // than a saved game, and there was no way to reach the other slots.
+  UI.screen = "title";
+  HAS_SAVE = SLOTS.some((n) => META.slots[n]);
   render();
 })();

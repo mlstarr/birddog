@@ -37,9 +37,15 @@ let ARCHIVE = [];
 
 function slotSummary(s) {
   if (!s) return null;
+  // Enough to choose between careers without opening them.
+  const where = s.phase === "career-over" ? "career finished"
+    : s.phase === "offseason" ? "offseason"
+    : (s.draft && s.draft.idx < s.draft.picks.length) ? `mid-draft, pick ${s.draft.idx + 1} of ${s.draft.picks.length}`
+    : `scouting, ${s.looksLeft} look${s.looksLeft === 1 ? "" : "s"} left`;
   return {
     year: s.year, seasons: (s.history || []).length, surplus: Math.round(s.lifetimeSurplus || 0),
     signed: s.signedTotal || 0, titles: s.titles || 0, hof: (s.hofList || []).length,
+    farm: (s.farm || []).length, pick: s.draftPos, where,
     best: s.best ? s.best.name : null, saved: Date.now(),
   };
 }
