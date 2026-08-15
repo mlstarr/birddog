@@ -1,8 +1,17 @@
-# Birddog
+# Birddog — build 48
 
 An amateur scouting simulation. You cover a draft class every spring with a
 limited number of trips and a bonus pool that is the sum of the picks you own.
 Forty seasons later the organisation finds out what you were right about.
+
+## Am I running the current version?
+
+The bottom of the title screen and the front office reads:
+
+    build 48 · slots, live draft, schools
+    3 save slots · 29 rival clubs
+
+If it says anything else, you are on an older copy.
 
 ## Putting it online (GitHub Pages)
 
@@ -15,9 +24,10 @@ Forty seasons later the organisation finds out what you were right about.
 ## Updating it later
 
 The service worker is network-first, so a new upload arrives on the next load
-by itself — you no longer have to bump anything. If it ever seems stuck, the
-front office has a **Check for a new version** button that clears the cache and
-refetches from scratch.
+by itself. If it ever seems stuck, the front office has a **Check for a new
+version** button that clears every cache and refetches from scratch.
+
+Adding `#reset` to the URL wipes all saves and starts clean.
 
 ## Saves
 

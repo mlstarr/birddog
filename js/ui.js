@@ -4,7 +4,9 @@
 
 /* ---------- state ---------- */
 const SAVE_KEY = "birddog.save.v7";
-const BUILD = "build 43 \u00b7 2026-08-06";
+// Bump this with every release. It is the only way to tell, from inside the
+// running app, which version you are actually looking at.
+const BUILD = "build 48 \u00b7 slots, live draft, schools";
 const SEASONS = 40;
 let S = null;
 let UI = { sort: "ofp", filter: "all", sel: null, pickSel: null, expand: {}, toast: null, screen: "title", armed: null };
@@ -435,7 +437,7 @@ function viewTitle() {
       <div class="pt"><b>Slot money is the constraint.</b><span>Each pick carries an assigned value. Sign a college senior cheap and the savings fund an over-slot run at someone who fell.</span></div>
       <div class="pt"><b>Winning costs you.</b><span>The players you develop make the big club better, which pushes your pick later and shrinks next year's pool.</span></div>
     </div>` : ""}
-    <div class="build">${BUILD}</div>
+    <div class="build">${BUILD}<br>${SLOTS.length} save slots \u00b7 ${(S && S.clubs ? S.clubs.length : 29)} rival clubs</div>
   </div>`;
 }
 
@@ -526,7 +528,7 @@ function viewOffice() {
       : `<div class="sp"></div><button class="btn ghost" data-a="arm" data-k="roll">Roll back a season</button>`}
     <div class="sp"></div>
     <button class="btn ghost" data-a="arm" data-k="restart">Start a new career</button>
-    <div class="build">${BUILD}</div>
+    <div class="build">${BUILD}<br>${SLOTS.length} save slots \u00b7 ${(S && S.clubs ? S.clubs.length : 29)} rival clubs</div>
   </div>`;
 }
 function seasonNote() {
