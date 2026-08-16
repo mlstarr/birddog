@@ -6,7 +6,7 @@
    version always tries the network, falls back to cache when there isn't one,
    and tells the page when a newer build has installed so it can reload itself. */
 
-const CACHE = "birddog-v53";
+const CACHE = "birddog-v57";
 const ASSETS = [
   "./", "index.html", "css/style.css", "icon.svg", "manifest.webmanifest",
   "js/market.js", "js/schools.js", "js/core.js", "js/text.js", "js/career.js", "js/world.js",

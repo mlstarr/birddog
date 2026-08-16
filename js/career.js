@@ -8,6 +8,22 @@
 
 const DEV_COST_YEAR = 0.35;
 
+// Where the organisation puts him to begin with. A top prep bat does not go to
+// the complex — he goes straight to full-season ball, which is the only way a
+// nineteen-year-old ever turns up in the majors. A senior sign who is already
+// finished starts high and may never move again.
+function startingLevel(p) {
+  const now = p.isP ? pitOVR(p.cur) : hitOVR(p.cur);
+  const college = p.origin === "COL" || p.origin === "JUCO";
+  let li = college ? 1 : 0;
+  if (now >= 58) li += 2;
+  else if (now >= 51) li += 1;
+  if (college && p.level === "College senior" && now >= 46) li += 1;
+  // Nobody starts above Double-A, and a teenager starts no higher than Low-A
+  // unless he is genuinely exceptional.
+  return clamp(li, 0, college ? 3 : (now >= 58 ? 2 : 1));
+}
+
 function initRecord(p0, bonus, pick, slot, year, upgrades, shadow) {
   // Once he's signed, the spring's paperwork is dead weight. Keep the grades and
   // your beliefs about him; drop the report text and the phrasing memory.
@@ -45,7 +61,7 @@ function initRecord(p0, bonus, pick, slot, year, upgrades, shadow) {
   return {
     id: p.id, p, bonus, pick, slot, signedYear: year, shadow: !!shadow,
     st: {
-      g, ceil, age: p.age, li: p.origin === "COL" || p.origin === "JUCO" ? 1 : 0,
+      g, ceil, age: p.age, li: startingLevel(p),
       mlbYears: 0, devPath, earlyRate, lateRate,
       injuryDamage: 0, badYears: 0, injuryDays: 0, debutGrades: null,
       honors: [], seasons: [], warTotal: 0, salTotal: 0, devCost: 0.4,
@@ -126,12 +142,40 @@ function stepSeason(rec, upgrades, year) {
   // while to be believed. That lag is the only edge you have when you sell.
   st.pubOvr += (ovr - st.pubOvr) * 0.45 + gauss(0, 1.3);
   st.pubCeil += (ceilOvr - st.pubCeil) * 0.33 + gauss(0, 1.3);
+  // ---- moving through the system ----
+  // A level a year is the baseline, not the rule. A polished college arm can be
+  // in Double-A by August; a teenager repeats Low-A twice and nobody panics.
+  // Organisations also push players they believe in and park players they don't.
   const needed = [28, 34, 38, 42, 45, 48];
-  if (st.li < 5) {
+  let jumped = 0;
+  if (st.li < 5 && missed < 100) {
     const thr = needed[st.li + 1];
-    if (ovr >= thr + gauss(0, 1.5) && missed < 100) st.li += 1;
-    else if (ovr >= thr - 3 && rnd() < 0.35 && missed < 100) st.li += 1;
+    const margin = ovr - thr;
+    // how hard the organisation is pushing him: young, high-ceiling, good
+    // makeup players get moved aggressively
+    const push = (st.age <= 21 ? 1.4 : st.age <= 23 ? 1.0 : 0.7)
+      * (1 + 0.10 * (upgrades.playerdev || 0))
+      * (1 + (p.makeup - 50) * 0.006)
+      * ((p.isP ? pitOVR(ceil) : hitOVR(ceil)) >= 55 ? 1.25 : 1);
+    // an older player stuck at a level gets moved on or moved out
+    const stale = (st.atLevel || 1) >= 3 ? 0.25 : 0;
+
+    // The jump to the majors is about opportunity as much as readiness, so a
+    // Triple-A player who is ready gets there rather than ageing in place.
+    const lastStep = st.li === 4 ? 1.35 : 1;
+    // the majors are not handed to a player in his first professional summer
+    const green = st.seasons.length === 0 ? (st.li >= 3 ? 0.10 : 0.55) : st.seasons.length === 1 && st.li >= 4 ? 0.55 : 1;
+    if (margin >= 18 && st.li <= 2 && rnd() < 0.08 * push) jumped = 3;      // straight past a whole tier
+    else if (margin >= 9 && st.li <= 3 && rnd() < 0.30 * push) jumped = 2;  // skipped a level
+    else if (margin >= 0 && rnd() < clamp(0.62 * push * lastStep * green + stale, 0.1, 0.96)) jumped = 1;
+    else if (margin >= -3.5 && rnd() < clamp(0.28 * push + stale, 0.05, 0.7)) jumped = 1;
+    else if (margin >= -7 && (st.atLevel || 1) >= 3 && rnd() < 0.22) jumped = 1;   // aged out of the level
   }
+  // He plays this season wherever he ends up, so a promotion means year one at
+  // the new level rather than year zero.
+  if (jumped) { st.li = clamp(st.li + jumped, 0, 5); st.atLevel = 1; }
+  else st.atLevel = (st.atLevel || 0) + 1;
+  st.repeated = st.atLevel >= 2 ? st.atLevel : 0;   // how many years he has sat here
   const level = LEVELS[st.li];
   const inMLB = st.li === 5;
   if (inMLB && !st.debutGrades) st.debutGrades = { ...g };
@@ -229,6 +273,7 @@ function stepSeason(rec, upgrades, year) {
   mktValue = Math.round(mktValue * 10) / 10;
 
   const season = { year, age: Math.floor(age), level, line, war: inMLB ? war : null, posMove,
+    jumped, repeated: jumped ? 0 : st.repeated,
     salary: inMLB ? salary : null, injNote, missed, awards: aw, ovr: Math.round(ovr),
     mktValue, surplus: Math.round(seasonSurplus * 10) / 10 };
   st.seasons.push(season);
@@ -256,9 +301,10 @@ function stepSeason(rec, upgrades, year) {
       : dealTotal < 100 ? "a bona fide All-Star" : "a franchise cornerstone";
     tradeThisYear = { age: Math.floor(age), level, ret, pkgSize, dealTotal, desc, stance,
       share: Math.round((ret / Math.max(0.1, dealTotal)) * 100) };
+    // The return is a player, not a cheque. He goes on the big league roster and
+    // his surplus is earned season by season like everyone else's.
+    tradeThisYear.got = makeReturnPlayer(ret, year, p.name);
     st.trade = tradeThisYear;
-    st.surplus = Math.round((st.surplus + ret) * 10) / 10;
-    season.surplus = Math.round((season.surplus + ret) * 10) / 10;
     st.done = true; st.outcome = "traded";
   }
   if (!st.done) {
@@ -266,7 +312,14 @@ function stepSeason(rec, upgrades, year) {
     if (st.mlbYears >= 6) { st.done = true; st.outcome = "control-complete"; }
     else if (inMLB && st.badYears >= 2 && st.mlbYears >= 2) { st.done = true; st.outcome = "released"; }
     else if (!inMLB && age >= 25 && ovr < 41 && rnd() < 0.55) { st.done = true; st.outcome = "released"; }
-    else if (!inMLB && age >= 27) { st.done = true; st.outcome = "released"; }
+    else if (!inMLB && age >= 27 && st.li <= 3) { st.done = true; st.outcome = "released"; }
+    else if (!inMLB && age >= 28 && st.li >= 4) {
+      // Useful Triple-A depth. Clubs keep these men around for years — they
+      // cover injuries, they catch bullpens, and the young players listen to
+      // them. He is not a prospect any more, but he is not gone either.
+      st.orgPlayer = true;
+      if (age >= 32 || rnd() < 0.22) { st.done = true; st.outcome = "org-career"; }
+    }
     else if (st.injuryDamage >= 5) { st.done = true; st.outcome = "injury-ended"; }
   }
 
@@ -320,6 +373,9 @@ function closeRecord(rec) {
   let verdict;
   if (st.trade && st.warTotal < 0.2 && st.mlbYears === 0) verdict = "Traded as a prospect. He never played a game for you.";
   else if (st.trade && st.warTotal < 0.2) verdict = "Traded before he contributed anything on the field.";
+  else if (st.outcome === "org-career") verdict = st.mlbYears > 0
+    ? "Up and down for years, then a Triple-A career. The young players learned from him."
+    : "Never got there. Spent years in the upper minors as organisational depth and a steadying voice.";
   else if (st.outcome === "released") verdict = st.mlbYears > 0 ? "Never stuck. Released after a cup of coffee." : "Never made it. Released as a minor league free agent.";
   else if (st.outcome === "injury-ended") verdict = "Career derailed by injuries.";
   else if (peakWAR >= 6) verdict = "Superstar. Perennial MVP candidate.";
@@ -345,10 +401,11 @@ function closeRecord(rec) {
     else if (p.makeup >= 58) notes.push(`Makeup ${MK} — he did the work. It still didn't come. Effort isn't a guarantee.`);
   }
   if (st.trade) {
-    const t = st.trade;
-    notes.push((t.pkgSize === 1
-      ? `Traded at ${t.age} out of ${t.level}, straight up, for ${t.desc}. The return was valued at ${money(t.dealTotal)} and all of it is credited to you.`
-      : `Traded at ${t.age} out of ${t.level} as one of ${t.pkgSize} pieces going out for ${t.desc}. The whole deal was worth about ${money(t.dealTotal)}; he was ${t.share}% of what the other club was buying, so ${money(t.ret)} of it is credited to you.`));
+    const t = st.trade, g = t.got;
+    notes.push(t.pkgSize === 1
+      ? `Traded at ${t.age} out of ${t.level}, straight up, for ${g ? g.name : t.desc}.`
+      : `Traded at ${t.age} out of ${t.level} as one of ${t.pkgSize} pieces going out for ${t.desc}.`);
+    if (g) notes.push(`${g.name} came back — ${g.pos}, ${g.age} at the time, ${g.tier} on ${g.yearsLeft} year${g.yearsLeft === 1 ? "" : "s"} of contract at ${money(g.salary)} a season. What he is worth to you is what he does on the field, not what the deal was appraised at.`);
   }
   if (debutAvg != null && finalAvg - debutAvg >= 6)
     notes.push(`He arrived unfinished. He spent the first half of your six years getting there, and you paid for the climb as well as the peak.`);
@@ -365,6 +422,7 @@ function closeRecord(rec) {
   if (!p.isP && (POS_ADJ[p.pos] ?? 0) <= -7)
     notes.push(`A ${p.pos} has to hit a great deal to be worth anything — the position costs about ${Math.abs(POS_ADJ[p.pos])} runs a year against a shortstop.`);
   if (!p.isP && g.disc <= 42 && g.hit >= 55) notes.push(`He hit for average without walking. A ${r5(g.disc)} approach keeps the on-base number ordinary.`);
+  if (st.outcome === "org-career") notes.push(`He was in the organisation for ${st.seasons.length} seasons. Not every signing becomes a big leaguer; some of them become the reason the others do.`);
   if (st.mlbYears < 6 && st.outcome === "released") notes.push(`The six years of control ran out early — you get no value from years he wasn't on the roster.`);
   if (notes.length <= 1 && peakWAR >= 3) notes.push(`Healthy, played every day, and the tools showed up. This is what it looks like when it works.`);
 
@@ -404,3 +462,88 @@ const DEV_STORY = {
     `Never developed. The tools on draft day were the tools he retired with.`,
   ],
 };
+
+/* ============================================================
+   WHAT COMES BACK
+   A prospect is traded for a major leaguer, and that is the whole point of the
+   deal — the club is buying wins now. He arrives on the big league roster,
+   plays out what is left of his contract at something close to market salary,
+   and produces real WAR on thin surplus. Trading a cost-controlled prospect for
+   a paid veteran nearly always LOSES surplus and BUYS wins. That is the trade.
+   ============================================================ */
+
+function makeReturnPlayer(value, year, fromName) {
+  // value is what the other club gave up, in surplus terms. A veteran's surplus
+  // is thin, so the same value buys a much better player than it would prospects.
+  const isP = rnd() < 0.42;
+  const age = ri(25, 32);
+  const yearsLeft = clamp(Math.round(1 + rnd() * 4), 1, 5);
+  // war per season implied by what they surrendered, spread over the contract
+  // A better prospect buys a better player, but the curve is flat — nobody is
+  // trading a genuine 8-WAR season for a minor leaguer.
+  const perYear = clamp(1.0 + Math.pow(Math.max(0, value), 0.52) * 0.38, 0.4, 5.6);
+  const war = Math.round(clamp(gauss(perYear, 0.5), 0.2, 6.2) * 10) / 10;
+  // He is paid about what he is worth. Sometimes a touch under, often a touch
+  // over — which is exactly why clubs give up prospects to get him.
+  const salary = Math.round(Math.max(1.5, war * DOLLARS_PER_WAR * (0.86 + rnd() * 0.34)) * 10) / 10;
+  const asian = rnd() < 0.05, latin = rnd() < 0.28;
+  const name = asian ? `${pick(ASIA_FIRST)} ${pick(ASIA_LAST)}`
+    : latin ? `${pick(LATIN_FIRST)} ${pick(LATIN_LAST)}`
+    : `${pick(US_FIRST)} ${pick(US_LAST)}`;
+  const pos = isP ? (rnd() < 0.28 ? "LHP" : "RHP") : pick(HIT_POS);
+  const tier = war >= 4.5 ? "an All-Star" : war >= 3 ? "an everyday regular"
+    : war >= 1.6 ? "a useful major leaguer" : "a bench piece";
+  return {
+    name, pos, isP, age, yearsLeft, war, salary, tier, acquired: year, from: fromName,
+    seasons: [], warTotal: 0, salTotal: 0, surplus: 0, done: false,
+  };
+}
+
+// One season for an acquired big leaguer.
+function stepReturnPlayer(v, year) {
+  if (v.done) return null;
+  v.age += 1;
+  const decline = v.age >= 33 ? 0.82 : v.age >= 31 ? 0.92 : 1;
+  const war = Math.round(clamp(gauss(v.war * decline, 1.1), -0.8, 9) * 10) / 10;
+  const value = war * DOLLARS_PER_WAR;
+  const surplus = Math.round((value - v.salary) * 10) / 10;
+  v.warTotal = Math.round((v.warTotal + war) * 10) / 10;
+  v.salTotal = Math.round((v.salTotal + v.salary) * 10) / 10;
+  v.surplus = Math.round((v.surplus + surplus) * 10) / 10;
+  v.war = Math.max(0.3, v.war * decline);
+  const line = v.isP
+    ? `${ipString(ri(48, 64) * 3 + ri(0, 2))} IP, ${clamp(4.75 - war * 0.36 + gauss(0, 0.28), 2.15, 7.4).toFixed(2)} ERA`
+    : `${clamp(0.244 + war * 0.0085 + gauss(0, 0.012), 0.19, 0.335).toFixed(3).slice(1)} average, ${Math.max(0, Math.round(12 + war * 3.4 + gauss(0, 4)))} HR`;
+  const season = { year, age: v.age, war, salary: v.salary, surplus, line };
+  v.seasons.push(season);
+  v.yearsLeft -= 1;
+  if (v.yearsLeft <= 0) v.done = true;
+  return season;
+}
+
+/* ---------- selling at the deadline ----------
+   The other direction. A veteran on an expiring deal, on a club going nowhere,
+   gets flipped for prospects — and those prospects are yours to develop. This
+   is how the win-now cycle closes back into the farm. */
+function sellVeteran(v, year, upgrades, wins) {
+  // value left on him: what he is producing, times what is left of the deal,
+  // discounted because everyone knows you have to move him
+  const left = Math.max(0, v.yearsLeft);
+  const value = clamp(v.war * DOLLARS_PER_WAR * left * 0.42 - v.salary * left * 0.25, 0, 120);
+  const n = value > 55 ? 3 : value > 22 ? 2 : 1;
+  const got = [];
+  for (let i = 0; i < n; i++) {
+    const share = value / n;
+    const p = genProspect(year - ri(0, 2));
+    // the quality of what comes back tracks what he was worth
+    const lift = clamp((share - 12) * 0.32, -10, 16);
+    for (const k in p.fut) p.fut[k] = clamp(Math.round(p.fut[k] + lift * (GROWTH_SHARE[k] ?? 0.7)), 20, 80);
+    for (const k in p.cur) p.cur[k] = clamp(Math.round(p.cur[k] + lift * 0.4 * (GROWTH_SHARE[k] ?? 0.7)), 20, 80);
+    applyEconomy(p, p.consensus);
+    const rec = initRecord(p, 0, null, 0, year, upgrades, false);
+    rec.acquiredFor = v.name;
+    rec.st.li = clamp(1 + Math.floor(rnd() * 3), 0, 4);
+    got.push(rec);
+  }
+  return { name: v.name, value: Math.round(value * 10) / 10, got, year };
+}

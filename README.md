@@ -1,4 +1,4 @@
-# Birddog — build 52
+# Birddog — build 56
 
 An amateur scouting simulation. You cover a draft class every spring with a
 limited number of trips and a bonus pool that is the sum of the picks you own.
@@ -8,7 +8,7 @@ Forty seasons later the organisation finds out what you were right about.
 
 The bottom of the title screen reads:
 
-    build 52 · living market, live draft, slots
+    build 56 · development paths, org careers
     3 save slots · 29 rival clubs
 
 Anything else means an older copy is cached. Clear the browser's site data once
@@ -31,8 +31,7 @@ button. Adding `#reset` to the URL wipes all saves and starts clean.
 ## Saves
 
 The app always opens on the career picker. Three slots, an autosave every
-season, three seasons of rollback, and per-slot export/import. Use
-**Download a save file** occasionally.
+season, three seasons of rollback, and per-slot export/import.
 
 ## Files
 
@@ -43,7 +42,7 @@ season, three seasons of rollback, and per-slot export/import. Use
     js/schools.js           region-aware school names
     js/core.js              prospect generation, scouting, report language
     js/text.js              composed scouting prose
-    js/career.js            per-season development and the career sim
+    js/career.js            development, promotion, the career sim, trades
     js/world.js             rival prospect pool, inherited farm
     js/clubs.js             the other 29 clubs and how they draft
     js/economy.js           slot money, draft order, signing prices

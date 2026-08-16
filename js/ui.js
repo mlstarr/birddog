@@ -6,7 +6,7 @@
 const SAVE_KEY = "birddog.save.v7";
 // Bump this with every release. It is the only way to tell, from inside the
 // running app, which version you are actually looking at.
-const BUILD = "build 52 \u00b7 living market, live draft, slots";
+const BUILD = "build 56 \u00b7 development paths, org careers";
 const SEASONS = 40;
 let S = null;
 let UI = { sort: "ofp", filter: "all", sel: null, pickSel: null, expand: {}, toast: null, screen: "title", armed: null };
@@ -19,7 +19,7 @@ function newGame() {
     draft: null, history: [], lastResults: null, phase: "scouting",
     farm: [], shadow: [], closed: [], seasonReport: null, pending: [], ach: {}, playoffs: 0, titles: 0,
     pendingHOF: [], hofList: [], rivals: [],
-    clubs: seedClubs(), pool: [], market: rollMarket(),
+    clubs: seedClubs(), pool: [], market: rollMarket(), acquired: [],
     staff: [makeScout(0), makeScout(0), makeScout(0), makeScout(0), makeScout(0)],
     careerWAR: 0, allStars: 0, superstars: 0, signedTotal: 0, mlbTotal: 0,
     winsSum: 0, bigSeasons: 0, best: null,
@@ -248,6 +248,8 @@ const arrowFor = (d) => ARROWS.find((a) => d >= a[0]) || ARROWS[ARROWS.length - 
 const toolDelta = (p, t) => getEst(p, `${t}_fut`).m - (p.board ? p.board[t] : priorFor(p, `${t}_fut`).m);
 const ofpDelta = (p) => estOFP(p) - (p.boardOFP != null ? p.boardOFP : estOFP(p));
 const arrowOf = (p) => arrowFor(ofpDelta(p));
+const ordinal = (n) => n + (n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd"
+  : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th");
 // "L/R" read as two positions side by side. Say what it means.
 const handed = (p) => p.bats === "S" ? `switch, T${p.throws}` : `B${p.bats}/T${p.throws}`;
 // Your department will not put a number on a player it hasn't seen enough of.
@@ -1056,12 +1058,44 @@ function advanceSeason(bonusesPaid) {
     if (r.closed) closedNow.push(rec);
   }
   for (const rec of S.shadow) stepSeason(rec, S.upgrades, S.year);
+
+  // players who came back in trades are on the big league roster
+  const vetLines = [];
+  for (const v of (S.acquired || [])) {
+    const r = stepReturnPlayer(v, S.year);
+    if (!r) continue;
+    mlbWAR += r.war;
+    seasonSurplus += r.surplus;
+    vetLines.push({ v, season: r });
+  }
+  // A club out of the race sells. Those prospects land in your system.
+  const sold = [];
+  for (const v of (S.acquired || [])) {
+    if (v.done || v.yearsLeft > 2) continue;
+    const outOfIt = S.wins < 82;
+    if (outOfIt && rnd() < 0.34) {
+      const deal = sellVeteran(v, S.year, S.upgrades, S.wins);
+      deal.got.forEach((r) => S.farm.push(r));
+      sold.push(deal);
+      v.done = true; v.soldOn = true;
+    }
+  }
+  const vetGone = (S.acquired || []).filter((v) => v.done && !v.soldOn);
+  S.acquired = (S.acquired || []).filter((v) => !v.done);
+  S.soldTotal = (S.soldTotal || 0) + sold.length;
+  vetGone.forEach((v) => {
+    S.lifetimeSurplus = Math.round((S.lifetimeSurplus + 0) * 10) / 10;   // already booked yearly
+  });
+
   ageRivals(S);
   driftMarket(S.market);
   dedupeNames(S);
 
   // close the books on anyone whose time is up
   for (const rec of closedNow) {
+    if (rec.st.outcome === "traded" && rec.st.trade && rec.st.trade.got) {
+      S.acquired = (S.acquired || []).concat([rec.st.trade.got]);
+    }
     if (rec.st.outcome === "traded") {
       const cont = { p: rec.p, bonus: 0, pick: null, slot: 0, signedYear: rec.signedYear, shadow: true,
         wasTraded: { ret: rec.st.trade.ret, year: S.year, stance: rec.st.trade.stance, warForYou: rec.st.warTotal } };
@@ -1139,12 +1173,24 @@ function advanceSeason(bonusesPaid) {
   S.bigSeasons = (S.bigSeasons || 0) + (S.wins >= 90 ? 1 : 0);
 
   // October
-  let postseason = null;
-  const pOdds = clamp((S.wins - 80) / 18, 0, 0.95);
+  let postseason = null, postMoney = 0;
+  // October is scarcer, and how far you go depends heavily on how good you are.
+  // Flat title odds meant an 88-win club and a 100-win club were nearly the
+  // same, so there was never a reason to push.
+  const pOdds = clamp((S.wins - 82) / 16, 0, 0.94);
   if (rnd() < pOdds) {
     S.playoffs = (S.playoffs || 0) + 1;
-    const won = rnd() < 0.11 + Math.max(0, S.wins - 88) / 300;
-    if (won) { S.titles = (S.titles || 0) + 1; postseason = "title"; } else postseason = "berth";
+    const won = rnd() < clamp(0.045 + Math.max(0, S.wins - 84) / 105, 0.03, 0.34);
+    // Ownership shares the gate. This is why buying wins is a strategy and not
+    // simply a way to burn surplus.
+    if (won) {
+      S.titles = (S.titles || 0) + 1; postseason = "title";
+      postMoney = 155; S.postMoneyTotal = (S.postMoneyTotal || 0) + 155;
+    } else {
+      postseason = "berth";
+      postMoney = 55; S.postMoneyTotal = (S.postMoneyTotal || 0) + 55;
+    }
+    seasonSurplus += postMoney;
   }
 
   computeDraftPos(S, postseason);
@@ -1155,7 +1201,7 @@ function advanceSeason(bonusesPaid) {
   const unlocked = checkAchievements({ events, trades: closedNow.map((r) => r.st.trade).filter(Boolean),
     closedRecs: S.closed.slice(-closedNow.length), allPicksSigned: S.draft &&
       S.draft.picks.filter((pk) => pk.pid).length === S.draft.picks.length && S.draft.picks.length >= 8 });
-  S.seasonReport = { year: S.year, events, postseason, unlocked, inducted, epilogues, closed: S.closed.slice(-closedNow.length || 0).slice(0, 99),
+  S.seasonReport = { year: S.year, events, postseason, postMoney, sold, unlocked, inducted, epilogues, vetLines, vetGone, closed: S.closed.slice(-closedNow.length || 0).slice(0, 99),
     closedRecs: closedNow.map((rec) => S.closed[S.closed.length - closedNow.length + closedNow.indexOf(rec)]),
     debuts: debuts.map((r) => r.p.name), graduated: graduated.map((r) => r.p.name),
     gotAway, mlbWAR: Math.round(mlbWAR * 10) / 10, seasonSurplus, grade, paid,
@@ -1168,7 +1214,7 @@ function advanceSeason(bonusesPaid) {
   pushRollback(META.activeSlot, S);
   if (S.phase === "career-over" && !S.archived) {
     S.archived = true;
-    archiveCareer(S, careerTier(S.lifetimeSurplus)[1]);
+    archiveCareer(S, careerTier(legacyScore(S))[1]);
   }
   UI.screen = "season"; UI.expand = {}; save(); render();
 }
@@ -1183,16 +1229,25 @@ function nextYear() {
 }
 
 const CAREER_TIERS = [
-  [7400, "Hall of Fame", "They name the complex after you. Thirty years of finding people nobody else saw."],
-  [6400, "Legendary", "One of the great scouting directors of the era. Other clubs copied your process."],
-  [5300, "Elite", "A long run at the top of the profession. You built a pipeline that never dried up."],
-  [4300, "Very good", "Consistently ahead of the board. A few misses, but the hit rate held up for three decades."],
-  [3200, "Solid", "A respectable career. You beat the consensus more often than not."],
-  [2200, "Adequate", "Roughly what a competent department produces. Some good years, some forgettable ones."],
-  [900, "Underwhelming", "You drafted close to the board and got close-to-board results."],
-  [500, "Poor", "The money mostly went out and didn't come back. It's a hard job."],
+  [9000, "Hall of Fame", "They name the complex after you. Thirty years of finding people nobody else saw."],
+  [7600, "Legendary", "One of the great scouting directors of the era. Other clubs copied your process."],
+  [6200, "Elite", "A long run at the top of the profession. You built a pipeline that never dried up."],
+  [5000, "Very good", "Consistently ahead of the board. A few misses, but the hit rate held up for three decades."],
+  [3700, "Solid", "A respectable career. You beat the consensus more often than not."],
+  [2500, "Adequate", "Roughly what a competent department produces. Some good years, some forgettable ones."],
+  [1300, "Underwhelming", "You drafted close to the board and got close-to-board results."],
+  [600, "Poor", "The money mostly went out and didn't come back. It's a hard job."],
   [-1e9, "A cautionary tale", "Forty years, very little to show for it. Somewhere there's a file with your name on it."],
 ];
+// A career is not only the money. Ownership remembers October. Judging purely
+// on surplus made every win-now decision a self-inflicted wound, which is not
+// how the job is actually assessed.
+function legacyScore(s) {
+  return Math.round((s.lifetimeSurplus || 0)
+    + (s.titles || 0) * 420
+    + (s.playoffs || 0) * 55
+    + ((s.hofList || []).length) * 120);
+}
 function careerTier(v) { return CAREER_TIERS.find((t) => v >= t[0]); }
 
 function viewCareer() {
@@ -1201,7 +1256,7 @@ function viewCareer() {
     S.pendingHOF.forEach((h) => { h.posthumous = true; S.hofList.push(h); S.hon = S.hon || {}; S.hon["Hall of Fame"] = (S.hon["Hall of Fame"] || 0) + 1; });
     S.pendingHOF = []; save();
   }
-  const [, title, blurb] = careerTier(S.lifetimeSurplus);
+  const [, title, blurb] = careerTier(legacyScore(S));
   const hit = S.signedTotal ? Math.round((S.mlbTotal / S.signedTotal) * 100) : 0;
   const grades = S.history.map((h) => h.grade);
   const gcount = {}; grades.forEach((g) => (gcount[g[0]] = (gcount[g[0]] || 0) + 1));
@@ -1215,14 +1270,26 @@ function viewCareer() {
       <div class="dim xs">Everything your signings produced in team control, minus what they cost.</div>
     </div>
     <div class="grid2">
-      ${[["Players signed", S.signedTotal || 0], ["Reached the majors", `${S.mlbTotal || 0} (${hit}%)`],
+      <div class="card">
+      <div class="eyebrow">How the number was reached</div>
+      <div class="kv"><span>Surplus value created</span><b>${money(S.lifetimeSurplus || 0)}</b></div>
+      <div class="kv"><span>${S.titles || 0} World Series</span><b class="amb">${money((S.titles || 0) * 420)}</b></div>
+      <div class="kv"><span>${S.playoffs || 0} postseason berths</span><b class="amb">${money((S.playoffs || 0) * 55)}</b></div>
+      <div class="kv"><span>${(S.hofList || []).length} Hall of Famers</span><b class="amb">${money(((S.hofList || []).length) * 120)}</b></div>
+      <div class="hr"></div>
+      <div class="kv"><span><b>Career standing</b></span><b class="good">${money(legacyScore(S))}</b></div>
+      <div class="dim xs mt8">The job is not only about surplus. Ownership remembers October,
+      and so does everybody else.</div>
+    </div>
+    ${[["Players signed", S.signedTotal || 0], ["Reached the majors", `${S.mlbTotal || 0} (${hit}%)`],
          ["All-Star selections", (S.hon && S.hon["All-Star"]) || 0], ["MVPs / Cy Youngs", ((S.hon && S.hon.MVP) || 0) + ((S.hon && S.hon["Cy Young"]) || 0)],
          ["Rookies of the Year", (S.hon && S.hon["Rookie of the Year"]) || 0], ["Gold Gloves", (S.hon && S.hon["Gold Glove"]) || 0],
          ["Ownership briefs met", `${S.mandatesMet || 0} of ${S.mandatesTotal || 0}`],
          ["Career WAR produced", S.careerWAR || 0], ["Average club record", `${Math.round((S.winsSum || 0) / SEASONS)}–${162 - Math.round((S.winsSum || 0) / SEASONS)}`],
          ["90-win seasons", S.bigSeasons || 0], ["Postseason berths", S.playoffs || 0],
          ["World Series titles", S.titles || 0], ["Hall of Famers", (S.hofList || []).length], ["Achievements", `${Object.keys(S.ach || {}).length} of ${ACHIEVEMENTS.length}`],
-         ["Bonus money spent", money(S.bonusPaid || 0)], ["Still in the system", S.farm.length]
+         ["Bonus money spent", money(S.bonusPaid || 0)], ["October revenue", money(S.postMoneyTotal || 0)],
+         ["Veterans acquired in trades", (S.acquired || []).length + (S.soldTotal || 0)], ["Still in the system", S.farm.length]
         ].map(([l, v]) => `<div class="card stt"><span>${l}</span><b>${v}</b></div>`).join("")}
     </div>
     ${S.hofList && S.hofList.length ? `<div class="eyebrow mt">Hall of Famers you signed</div>
@@ -1271,9 +1338,15 @@ function viewSeason() {
     </div>
     ${R.postseason === "title" ? `<div class="card evt good"><div class="eyebrow">October</div>
       <div class="big good">World Series champions</div>
-      <div class="dim sm">Your people are a large part of why.</div></div>`
+      <div class="dim sm">Your people are a large part of why. Ownership credits the department
+      <b class="good">${money(R.postMoney)}</b> out of the postseason gate.</div></div>`
       : R.postseason === "berth" ? `<div class="card evt good"><div class="eyebrow">October</div>
-      <div class="sm">Reached the postseason.</div></div>` : ""}
+      <div class="sm">Reached the postseason. <b class="good">${money(R.postMoney)}</b> back to the department
+      out of the gate.</div></div>` : ""}
+    ${R.sold && R.sold.length ? R.sold.map((d) => `<div class="card evt"><div class="eyebrow">Sold at the deadline</div>
+      <div class="sm">${d.name} went out for ${d.got.length} prospect${d.got.length === 1 ? "" : "s"} —
+      ${d.got.map((r) => `<b>${r.p.name}</b> (${r.pos || r.p.pos}, ${LEVELS[r.st.li]})`).join(", ")}.</div>
+      <div class="dim sm mt4">They are in your system now. What they become is your problem.</div></div>`).join("") : ""}
     ${R.inducted && R.inducted.length ? R.inducted.map((h) => `<div class="card hof">
       <div class="eyebrow">Baseball Hall of Fame</div>
       <div class="big amb">${h.name}</div>
@@ -1308,6 +1381,17 @@ function viewSeason() {
         <div class="dim sm">${p.pos} · you scouted him in ${p.rank ? R.year : ""} and passed · ${res.totalWAR} WAR elsewhere</div></div>
         <div class="ofp"><b class="bad">${money(res.surplus)}</b><span>surplus</span></div></div>
         <div class="sm bad">${res.verdict}</div></div>`).join("")}` : ""}
+    ${R.vetLines && R.vetLines.length ? `<div class="eyebrow mt">Acquired in trades</div>
+      <div class="card">${R.vetLines.map(({ v, season }) => `<div class="fline">
+        <span class="fn">${v.name}</span><span class="fp dim">${v.pos}</span>
+        <span class="fs">${season.line} &middot; ${money(v.salary)} salary</span>
+        <span class="wr ${season.war >= 2 ? "good" : ""}">${season.war.toFixed(1)}</span>
+        <div class="xs finj ${season.surplus >= 0 ? "dim" : "bad"}">${season.surplus >= 0 ? "+" : ""}${money(season.surplus)} surplus &middot; ${v.yearsLeft} year${v.yearsLeft === 1 ? "" : "s"} left &middot; came back for ${v.from}</div>
+      </div>`).join("")}
+      <div class="dim xs mt8">A paid veteran earns close to what he is worth, so the surplus is thin.
+      What he buys you is wins.</div></div>` : ""}
+    ${R.vetGone && R.vetGone.length ? `<div class="card evt"><div class="eyebrow">Contracts expired</div>
+      ${R.vetGone.map((v) => `<div class="sm">${v.name} &mdash; ${v.warTotal} WAR over ${v.seasons.length} season${v.seasons.length === 1 ? "" : "s"}, ${v.surplus >= 0 ? "+" : ""}${money(v.surplus)} surplus. Acquired for ${v.from}.</div>`).join("")}</div>` : ""}
     <div class="eyebrow mt">Your system, ${R.year}</div>
     ${order.filter((l) => byLevel[l]).map((l) => `<div class="card">
       <div class="eyebrow">${l}</div>
@@ -1318,6 +1402,8 @@ function viewSeason() {
         ${e.season.injNote ? `<div class="bad xs finj">${e.season.injNote} — ${e.season.missed} days</div>` : ""}
         ${e.season.awards.length ? `<div class="xs amb finj">${e.season.awards.join(" &middot; ")}</div>` : ""}
         ${e.season.posMove ? `<div class="xs finj ${e.season.posMove.up ? "good" : "amb"}">${e.season.posMove.up ? "Moved up to" : "Moved off " + e.season.posMove.from + " to"} ${e.season.posMove.to}</div>` : ""}
+        ${e.season.jumped === 2 ? `<div class="xs finj good">Skipped a level</div>` : ""}
+        ${e.season.repeated >= 3 ? `<div class="xs finj bad">${ordinal(e.season.repeated)} year at this level</div>` : e.season.repeated === 2 ? `<div class="xs finj dim">Repeating the level</div>` : ""}
       </div>`).join("")}</div>`).join("")}
     <div class="sp"></div>
     <button class="btn pri" data-a="tab" data-k="office">${S.phase === "career-over" ? "See how your career went" : "To the front office"}</button>
@@ -1475,7 +1561,8 @@ function viewFarmPlayer() {
       <span class="flex sm">${y.line}${y.injNote ? `<div class="bad xs">${y.injNote} — ${y.missed} days</div>` : ""}</span>
       ${y.war != null ? `<span class="wr ${y.war >= 2 ? "good" : ""}">${y.war.toFixed(1)}</span>` : ""}
       ${y.awards && y.awards.length ? `<div class="yraw">${y.awards.join(" &middot; ")}</div>` : ""}
-      ${y.posMove ? `<div class="yraw">${y.posMove.up ? "Moved up to " + y.posMove.to : "Moved off " + y.posMove.from + " to " + y.posMove.to}</div>` : ""}</div>`).join("")}</div>
+      ${y.posMove ? `<div class="yraw">${y.posMove.up ? "Moved up to " + y.posMove.to : "Moved off " + y.posMove.from + " to " + y.posMove.to}</div>` : ""}
+      ${y.jumped === 2 ? `<div class="yraw">Skipped a level</div>` : y.repeated >= 3 ? `<div class="yraw dim">${ordinal(y.repeated)} year at the level</div>` : y.repeated === 2 ? `<div class="yraw dim">Repeated the level</div>` : ""}</div>`).join("")}</div>
   </div>`;
 }
 
@@ -1535,6 +1622,10 @@ function viewFarm() {
           ${last ? `<div class="dim sm mt4">${last.year}: ${last.line}${last.war != null ? ` · ${last.war.toFixed(1)} WAR` : ""}</div>` : ""}
         </button>`; }).join("")}`).join("")}
     ${S.farm.length === 0 ? `<div class="card note">Nothing in the system yet. Sign a draft class.</div>` : ""}
+    ${(S.acquired || []).length ? `<div class="eyebrow mt">On the big club, acquired in trades</div>
+      <div class="card">${S.acquired.map((v) => `<div class="hrow">
+        <b class="${v.surplus >= 0 ? "good" : "bad"}">${v.surplus >= 0 ? "+" : ""}${money(v.surplus)}</b>
+        <span class="dim sm flex">${v.name}, ${v.pos} &mdash; age ${v.age}, ${v.yearsLeft} year${v.yearsLeft === 1 ? "" : "s"} left at ${money(v.salary)} &middot; ${v.warTotal} WAR so far &middot; for ${v.from}</span></div>`).join("")}</div>` : ""}
     ${S.closed.length ? `<div class="eyebrow mt">Alumni — best you've developed</div>
       <div class="card">${[...S.closed].sort((a, b) => b.res.surplus - a.res.surplus).slice(0, 12).map((c) =>
         `<div class="hrow"><b class="${c.res.surplus >= 0 ? "good" : "bad"}">${c.res.surplus >= 0 ? "+" : ""}${money(c.res.surplus)}</b>
