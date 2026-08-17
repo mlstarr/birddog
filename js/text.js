@@ -265,8 +265,26 @@ const PRED = {
 };
 
 function coreLine(tool, b) {
-  if (!PRED[tool] || !SUBJ[tool] || rnd() < 0.30) return pick(T[tool][b]);
-  return `${pick(SUBJ[tool])} ${pick(PRED[tool][b])}.`;
+  // A quarter of the time use a handwritten line, which carries the voice.
+  // Otherwise compose: subject x predicate x sentence shape x optional tail.
+  // The generic predicates are shared by every tool, so adding one of those
+  // adds a line to all twelve rather than to one.
+  if (!PRED[tool] || !SUBJ[tool] || rnd() < 0.24) return pick(T[tool][b]);
+  const subs = SUBJ[tool].concat(SUBJ_EXTRA[tool] || []);
+  const preds = (PRED[tool][b] || []).concat(GENERIC_PRED[b] || []);
+  if (!preds.length) return pick(T[tool][b]);
+  // Don't let a subject turn up inside its own predicate — "the extension plays
+  // up because of the extension". Checked at generation so it stays correct as
+  // either list grows.
+  let subj = pick(subs), pred = pick(preds);
+  for (let i = 0; i < 6; i++) {
+    const noun = subj.replace(/^The /, "").toLowerCase();
+    const low = pred.toLowerCase();
+    if (!low.includes(" " + noun) && !low.startsWith(noun)) break;
+    if (i % 2) subj = pick(subs); else pred = pick(preds);
+  }
+  if (rnd() < 0.34) pred += ", " + pick(TAILS);
+  return pickLead().f(subj, pred);
 }
 
 

@@ -26,12 +26,12 @@ const money = (m) => (m >= 1000 ? `$${(m / 1000).toFixed(2)}B` : m >= 1 ? `$${m.
 const moneyK = (m) => (m >= 1 ? `$${m.toFixed(2)}M` : `$${Math.round(m * 1000)}K`);
 
 /* ---------- names ---------- */
-const US_FIRST = ["Jace","Tucker","Rhett","Colton","Brayden","Beau","Landry","Kade","Grayson","Wyatt","Cade","Braxton","Camden","Levi","Knox","Easton","Sawyer","Nolan","Bennett","Micah","Zane","Rowan","Dax","Ryder","Tate","Marcus","Elijah","Malik","Xavier","Terrance","DeShawn","Jamal","Isaiah","Amir","Jaylen","Quinton","Darius","Trevon","Emmett","Silas","Holden","Brooks","Porter","Lane","Crew","Judd","Cormac","Hayes","Finnegan","Deacon","Wilder","Bo","Rocco","Vance","Griffin","Sullivan","Maddox","Ellis","Ozzie","Trey"];
-const US_LAST = ["Ashworth","Bellamy","Crandall","Dunbar","Eldridge","Halloran","Kestler","Ledbetter","Mabry","Norquist","Ormsby","Pruitt","Quimby","Rademacher","Stapleton","Thornbury","Ulmer","Vandergriff","Wexler","Yarborough","Ziemba","Boughton","Calloway","Dellinger","Fenwick","Gundersen","Hollinger","Iverson","Jergens","Kilbride","Lattimore","McQuiston","Nesmith","Overstreet","Pickering","Rothgeb","Sizemore","Tackett","Vandiver","Whitmarsh","Applegate","Brumfield","Cardwell","Dorsett","Ferrell","Grissom","Huddleston","Ingersoll","Jessup","Kirkendall","Loughlin","Mattson","Northcutt","Peavey","Quarles","Rundle","Stallings","Tillman","Wagoner","Yeager"];
-const LATIN_FIRST = ["Yordani","Wilmer","Yeison","Adonis","Ederlyn","Elvin","Kelvin","Jhoan","Deivi","Yoendrys","Cristian","Franklin","Wilfredo","Osiris","Yandel","Dariel","Yohandry","Enmanuel","Braylin","Randy","Junior","Alberto","Starlin","Miguelangel","Yariel","Leonardo","Anderson","Wandy","Fredy","Jeisson","Ramón","Aneudy","Elian","Yohan","Darvin"];
-const LATIN_LAST = ["Peralta","Ureña","Batista","Cabral","Mejía","Almonte","Tavárez","Encarnación","De León","Guzmán","Cedeño","Núñez","Polanco","Solano","Difo","Terrero","Valdez","Aybar","Rosario","Beltrán","Carrasco","Duvergé","Espinal","Familia","Gómez","Herrera","Inoa","Jiménez","Lantigua","Montero","Ovalles","Paulino","Quezada","Rincón","Sención","Tejada","Veras","Ynoa","Zapata","Arístides"];
-const ASIA_FIRST = ["Kaito","Ren","Sora","Haruto","Yuto","Riku","Min-jun","Seo-jun","Do-hyun","Ji-ho","Chen-wei","Hong-yu"];
-const ASIA_LAST = ["Nishimura","Tanabe","Kikuchi","Ohara","Sugiyama","Kurokawa","Park","Kang","Yoon","Baek","Hsu","Chiang"];
+const US_FIRST = NAMES_US_FIRST;
+const US_LAST = NAMES_US_LAST;
+const LATIN_FIRST = NAMES_LATIN_FIRST;
+const LATIN_LAST = NAMES_LATIN_LAST;
+const ASIA_FIRST = NAMES_ASIA_FIRST;
+const ASIA_LAST = NAMES_ASIA_LAST;
 
 const HS_PREFIX = ["Bishop Lynch","Cypress Grove","Ridgeline","Saint Aloysius","Buford Trail","Marshall Hills","Deer Park","Wheatland","Chaparral","Blue Ridge","Ponte Verde","Harker Point","Lakeview East","Del Mar","Sunnybrook","Trinity Fork","Amherst Central","North Cobb Heritage","Vista Verde","Fort Bend Riley","Oakmont","Cedar Bluff","Palm Bay Central","Grandview","Kearney North"];
 const COLLEGES = ["Coastal Carolina","Wichita State","Sam Houston","Elon","Kennesaw State","Loyola Marymount","Dallas Baptist","UC Santa Barbara","Southern Miss","Campbell","Troy","Long Beach State","Wake Forest","Vanderbilt","LSU","Oregon State","East Carolina","Grand Canyon","Charlotte","Stetson","Bradley","Xavier","Kent State","Fresno State","Texas Tech","Arkansas","Clemson","UConn","Duke","Tulane","Nevada","Air Force"];
@@ -295,7 +295,7 @@ function genProspect(year, opts = {}) {
   const arch = weightedArch(isP ? ARCH_PIT : ARCH_HIT);
   const mod = arch.mod;
 
-  let age, school, home, level;
+  let age, school, home, level, intlCountry = null;
   // A player's school is in the state he's from — nobody is a Texas high
   // schooler at a school in New Jersey.
   if (origin === "HS") {
@@ -311,11 +311,21 @@ function genProspect(year, opts = {}) {
     age = 19 + (rnd() < 0.5 ? 0.5 : 0);
     home = pick(STATE_LIST); school = makeJuco(home); level = "Junior college";
   }
-  else { age = 16 + (rnd() < 0.4 ? 0.5 : 0); const c = pick(COUNTRIES); school = c === "Dominican Republic" ? pick(DR_TOWNS) + ", D.R." : c; home = c; level = "International FA"; }
+  else {
+    // Country first, then the name. Rolling them independently produced a
+    // Kenta Sasaki out of San Pedro de Macoris, which is the giveaway.
+    age = 16 + (rnd() < 0.4 ? 0.5 : 0);
+    intlCountry = pickCountry();
+    school = `${pick(intlCountry.towns)}, ${intlCountry.short}`;
+    home = intlCountry.c;
+    level = "International FA";
+  }
 
   const asian = origin === "INTL" && rnd() < 0.1;
   const latin = origin === "INTL" || (origin !== "INTL" && rnd() < 0.18);
-  const name = asian ? `${pick(ASIA_FIRST)} ${pick(ASIA_LAST)}` : latin ? `${pick(LATIN_FIRST)} ${pick(LATIN_LAST)}` : `${pick(US_FIRST)} ${pick(US_LAST)}`;
+  const name = intlCountry ? nameForStyle(intlCountry.style)
+    : latin ? `${pick(NAMES_LATIN_FIRST)} ${pick(NAMES_LATIN_LAST)}`
+    : `${pick(NAMES_US_FIRST)} ${pick(NAMES_US_LAST)}`;
 
   // Base talent level for the class — most are org filler, a few are real
   const tier = rnd();

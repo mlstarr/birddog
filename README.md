@@ -1,4 +1,4 @@
-# Birddog — build 56
+# Birddog — build 59
 
 An amateur scouting simulation. You cover a draft class every spring with a
 limited number of trips and a bonus pool that is the sum of the picks you own.
@@ -8,7 +8,7 @@ Forty seasons later the organisation finds out what you were right about.
 
 The bottom of the title screen reads:
 
-    build 56 · development paths, org careers
+    build 59 · names match their country
     3 save slots · 29 rival clubs
 
 Anything else means an older copy is cached. Clear the browser's site data once
@@ -38,12 +38,14 @@ season, three seasons of rollback, and per-slot export/import.
     index.html              shell, boot error reporter, update handling
     sw.js                   offline cache, network-first
     css/style.css           all styling
+    js/names.js             name pools and the countries they belong to
     js/market.js            this career's market biases, and how they drift
     js/schools.js           region-aware school names
-    js/core.js              prospect generation, scouting, report language
-    js/text.js              composed scouting prose
+    js/core.js              prospect generation, scouting, report assembly
+    js/text.js              scouting prose — subjects, predicates, composition
+    js/text2.js             generic predicates, tails and sentence shapes
     js/career.js            development, promotion, the career sim, trades
-    js/world.js             rival prospect pool, inherited farm
+    js/world.js             rival prospect pool, inherited farm, name dedupe
     js/clubs.js             the other 29 clubs and how they draft
     js/economy.js           slot money, draft order, signing prices
     js/saves.js             slots, autosave, archive, export/import

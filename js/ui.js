@@ -6,7 +6,7 @@
 const SAVE_KEY = "birddog.save.v7";
 // Bump this with every release. It is the only way to tell, from inside the
 // running app, which version you are actually looking at.
-const BUILD = "build 56 \u00b7 development paths, org careers";
+const BUILD = "build 59 \u00b7 names match their country";
 const SEASONS = 40;
 let S = null;
 let UI = { sort: "ofp", filter: "all", sel: null, pickSel: null, expand: {}, toast: null, screen: "title", armed: null };

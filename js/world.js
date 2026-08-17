@@ -68,9 +68,24 @@ function seedFarm(s) {
 /* ---------- nobody shares a name ---------- */
 const MIDDLE = "ABCDEFGHIJKLMNOPRSTVW";
 function dedupeNames(s) {
-  const seen = {};
+  const seen = {}, surnames = {};
+  // Two men with the same surname in one system reads as a mistake even when it
+  // isn't, so surnames are unique across everyone you can currently see. With
+  // seventy-odd names drawn per class this matters more than pool size does.
+  const surnameOf = (n) => n.split(" ").pop();
+  const freshSurname = (n) => {
+    const parts = n.split(" ");
+    for (let i = 0; i < 40; i++) {
+      const cand = pick(NAMES_US_LAST);
+      if (!surnames[cand]) return parts.slice(0, -1).join(" ") + " " + cand;
+    }
+    return n;
+  };
   const claim = (obj) => {
     let n = obj.name;
+    const sn = surnameOf(n);
+    if (surnames[sn]) { n = freshSurname(n); obj.name = n; }
+    surnames[surnameOf(n)] = 1;
     if (!seen[n]) { seen[n] = 1; return; }
     for (let i = 0; i < 24; i++) {
       const parts = n.split(" ");

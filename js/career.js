@@ -16,12 +16,13 @@ function startingLevel(p) {
   const now = p.isP ? pitOVR(p.cur) : hitOVR(p.cur);
   const college = p.origin === "COL" || p.origin === "JUCO";
   let li = college ? 1 : 0;
-  if (now >= 58) li += 2;
-  else if (now >= 51) li += 1;
-  if (college && p.level === "College senior" && now >= 46) li += 1;
-  // Nobody starts above Double-A, and a teenager starts no higher than Low-A
-  // unless he is genuinely exceptional.
-  return clamp(li, 0, college ? 3 : (now >= 58 ? 2 : 1));
+  // Almost everyone begins at the bottom of their track. The assignment only
+  // moves for players who are genuinely finished already, and even then by one
+  // level — a teenager does not open the year in Double-A.
+  if (now >= 60 && rnd() < 0.5) li += 1;
+  else if (now >= 53 && rnd() < 0.35) li += 1;
+  if (college && p.level === "College senior" && now >= 50 && rnd() < 0.4) li += 1;
+  return clamp(li, 0, college ? 3 : 1);
 }
 
 function initRecord(p0, bonus, pick, slot, year, upgrades, shadow) {
@@ -164,9 +165,12 @@ function stepSeason(rec, upgrades, year) {
     // Triple-A player who is ready gets there rather than ageing in place.
     const lastStep = st.li === 4 ? 1.35 : 1;
     // the majors are not handed to a player in his first professional summer
-    const green = st.seasons.length === 0 ? (st.li >= 3 ? 0.10 : 0.55) : st.seasons.length === 1 && st.li >= 4 ? 0.55 : 1;
-    if (margin >= 18 && st.li <= 2 && rnd() < 0.08 * push) jumped = 3;      // straight past a whole tier
-    else if (margin >= 9 && st.li <= 3 && rnd() < 0.30 * push) jumped = 2;  // skipped a level
+    // Nobody arrives in his first professional summer, and very few in the second.
+    const green = st.seasons.length === 0 ? 0.05 : st.seasons.length === 1 ? 0.45 : 1;
+    // A level a year is the norm. Skipping one is a real event, and two at once
+    // happens to a handful of players in a career.
+    if (margin >= 20 && st.li <= 2 && rnd() < 0.035 * push) jumped = 3;
+    else if (margin >= 11 && st.li <= 3 && rnd() < 0.16 * push) jumped = 2;
     else if (margin >= 0 && rnd() < clamp(0.62 * push * lastStep * green + stale, 0.1, 0.96)) jumped = 1;
     else if (margin >= -3.5 && rnd() < clamp(0.28 * push + stale, 0.05, 0.7)) jumped = 1;
     else if (margin >= -7 && (st.atLevel || 1) >= 3 && rnd() < 0.22) jumped = 1;   // aged out of the level
